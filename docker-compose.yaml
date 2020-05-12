@@ -1,0 +1,140 @@
+version: '2.2'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.8.0
+    container_name: elasticsearch
+    environment:
+      - http.host=0.0.0.0
+      - network.host=0.0.0.0
+      - transport.host=127.0.0.1
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - xpack.security.enabled=true
+      - "discovery.type=single-node"
+      - ELASTICSEARCH_USERNAME=yoursuperusername
+      - ELASTIC_PASSWORD=yoursuperduperpassword
+      - path.repo=/mnt/backup/snapshot
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+      - /mnt/backup/snapshot:/mnt/backup/snapshot
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    restart: always
+    ports:
+      - 9200
+      - 9300
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: 6g
+    cpus: 2
+    cap_add:
+      - IPC_LOCK
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx:/etc/nginx
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.8.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_PASSWORD="yoursuperduperpassword"
+    volumes:
+      - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml
+    restart: always
+    ports:
+      - 5601
+    cpus: 1
+    mem_limit: 3072m
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+  curator:
+    image: curator:5.8
+    environment:
+        ES_HOST: elasticsearch
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./curator/config:/config
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+  graylog:
+    image: graylog/graylog:3.1.3
+    environment:
+      # Generate one by using for example: pwgen -N 1 -s 96  , and change here and in graylog.conf
+      GRAYLOG_PASSWORD_SECRET: thelonglongstringofpasswordsecret
+      # Create one by using for example: echo -n yourpassword | shasum -a 256 , and change here and in graylog.conf
+      GRAYLOG_ROOT_PASSWORD_SHA2: thelonglongstringofrootpwdsha2
+      GRAYLOG_MONGODB_URI: mongodb://mongodb/graylog
+      GRAYLOG_MONGODB_MAX_CONNECTIONS: 100
+      GRAYLOG_MONGODB_THREADS_ALLOWED_TO_BLOCK_MULTIPLIER: 5
+      GRAYLOG_ELASTICSEARCH_CLUSTER_NAME: graylog
+      # Change here, NGINX config and graylog config
+      GRAYLOG_HTTP_EXTERNAL_URI: http://yourdomain.tld:9000/
+      GRAYLOG_SERVER_JAVA_OPTS: '-Xms5120m -Xmx5120m -XX:NewRatio=1 -XX:MaxMetaspaceSize=256m -server -XX:+ResizeTLAB -XX:+UseConcMarkSweepGC -XX:+CMSConcurrentMTEnabled -XX:+CMSClassUnloadingEnabled -XX:+UseParNewGC -XX:-OmitStackTraceInFastThrow'
+    depends_on:
+      - elasticsearch
+    restart: always
+    volumes:
+      - graylogdata:/opt/graylog/data
+      - ./graylog/config/graylog.conf:/usr/share/graylog/data/config/graylog.conf
+      - ./graylog/plugin/:/usr/share/graylog-server/plugin/
+    ports:
+      - 9000:9000
+      - 5044:5044
+      - 12201:12201/udp
+    links:
+      - "elasticsearch:elasticsearch"
+      - "mongodb:mongodb.service"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+  mongodb:
+    image: mongo:3.6
+    # container_name: "mongodb"
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+    volumes:
+      - mongodata:/data/db
+    restart: always
+    ports:
+      - 27017
+    command: mongod --smallfiles --logpath=/dev/null # --quiet
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
+volumes:
+  esdata:
+    driver: local
+  graylogdata:
+    driver: local
+  mongodata:
+    driver: local

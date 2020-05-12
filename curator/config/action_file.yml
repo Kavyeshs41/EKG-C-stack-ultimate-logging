@@ -1,0 +1,24 @@
+actions:
+  1:
+    action: snapshot
+    description: >-
+      Snapshot selected indices to 's3_repository' with the snapshot name.
+    options:
+      repository: my_fs_backup
+      name: curator-%Y.%m.%d
+      wait_for_completion: True
+      max_wait: 3600
+      wait_interval: 10
+      ignore_unavailable: True
+      include_global_state: False
+    filters:
+    - filtertype: pattern
+      kind: prefix
+      value: '^(graylog_).*$'
+    - filtertype: age
+      source: creation_date
+      direction: older
+      unit: days
+      unit_count: 15
+    - filtertype: closed
+      exclude: True
